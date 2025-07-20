@@ -1,16 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { Video } from 'expo-av';
+import { Video, ResizeMode } from 'expo-av';
 import app from '../components/firebase';
 import { useUser } from '../UserContext';
 
 const UploadScreen = () => {
   const [postText, setPostText] = useState('');
-  const [media, setMedia] = useState(null);
+  const [media, setMedia] = useState(null); // Lokale URI des ausgewählten Mediums
+  const [mediaType, setMediaType] = useState(null); // 'image' oder 'video' (von ImagePicker) ODER abgeleitet
+  const [originalFileName, setOriginalFileName] = useState(null); // Originaler Dateiname vom Picker
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState('');
@@ -34,9 +36,18 @@ const UploadScreen = () => {
 
   const handlePost = async () => {
     if (!postText && !media) {
-      Alert.alert('Error', 'Please add some text or an image/video.');
+      Alert.alert('Fehler', 'Bitte fügen Sie Text oder ein Bild/Video hinzu.');
       return;
     }
+    if (!user?.uid || !user?.email || !user?.username) {
+      Alert.alert('Fehler', 'Benutzerinformationen sind nicht verfügbar. Bitte melden Sie sich erneut an.');
+      return;
+    }
+    if (uploading) {
+      return;
+    }
+
+    setUploading(true);
 
     const db = getFirestore(app);
     const storage = getStorage(app);
@@ -44,30 +55,71 @@ const UploadScreen = () => {
     let mediaUrl = null;
     if (media) {
       try {
-        setUploading(true);
         const response = await fetch(media);
         const blob = await response.blob();
-        const mediaRef = ref(storage, `media/${Date.now()}_${user.uid}`);
+
+        let safeExtension = '';
+        let inferredExtension = '';
+
+        // Priorisiere fileName für die Erweiterung, da URI manchmal keine hat
+        if (originalFileName) {
+            const dotIndex = originalFileName.lastIndexOf('.');
+            if (dotIndex > -1) {
+                inferredExtension = originalFileName.substring(dotIndex).toLowerCase();
+            }
+        } else { // Fallback auf URI, falls fileName nicht verfügbar
+            const uriParts = media.split('.');
+            if (uriParts.length > 1) {
+                inferredExtension = `.${uriParts.pop().toLowerCase()}`;
+            }
+        }
+        
+        const actualMediaType = mediaType === ImagePicker.MediaTypeOptions.Video || 
+                                inferredExtension.match(/\.(mp4|mov|webm|avi|mkv)$/i) ? 
+                                ImagePicker.MediaTypeOptions.Video : 
+                                ImagePicker.MediaTypeOptions.Image;
+
+        if (actualMediaType === ImagePicker.MediaTypeOptions.Video) {
+            if (['.mp4', '.mov', '.webm', '.avi', '.mkv'].includes(inferredExtension)) {
+                safeExtension = inferredExtension;
+            } else {
+                safeExtension = '.mp4';
+            }
+        } else if (actualMediaType === ImagePicker.MediaTypeOptions.Image) {
+            if (['.jpeg', '.jpg', '.png', '.gif', '.bmp', '.webp', '.heic'].includes(inferredExtension)) {
+                safeExtension = inferredExtension;
+            } else {
+                safeExtension = '.jpeg';
+            }
+        } else {
+            safeExtension = '.bin';
+        }
+
+        console.log("DEBUG: Final safeExtension used for upload:", safeExtension);
+        
+        // --- KRITISCHSTE KORREKTUR HIER: Sicherstellen, dass der Dateiname keine Pfade enthält ---
+        // Generiere einen eindeutigen Dateinamen OHNE irgendwelche Pfadteile aus der Original-URI/Dateinamen
+        const baseFileName = `${Date.now()}_${user.uid}`; // Nur Basisname
+        const finalFileName = `${baseFileName}${safeExtension}`; // Basisname + bereinigte Erweiterung
+        
+        const uploadPath = `media/${finalFileName}`; // Endgültiger Pfad im Storage
+        const mediaRef = ref(storage, uploadPath);
+
         const snapshot = await uploadBytes(mediaRef, blob);
         mediaUrl = await getDownloadURL(snapshot.ref);
-        setUploading(false);
+        
       } catch (error) {
-        console.error('Error uploading media:', error);
-        Alert.alert('Error', 'Failed to upload image/video.');
+        console.error('Fehler beim Hochladen der Medien:', error);
+        Alert.alert('Fehler', 'Medien-Upload fehlgeschlagen. Bitte versuchen Sie es erneut.');
         setUploading(false);
         return;
       }
     }
 
-    if (!user) {
-      Alert.alert('Error', 'User information not available.');
-      return;
-    }
-
     const newPost = {
       text: postText,
       media: mediaUrl,
-      createdAt: new Date(),
+      createdAt: serverTimestamp(),
       user: {
         id: user.uid,
         email: user.email,
@@ -83,27 +135,39 @@ const UploadScreen = () => {
       await addDoc(collection(db, 'posts'), newPost);
       setPostText('');
       setMedia(null);
+      setMediaType(null);
+      setOriginalFileName(null);
       setTitle('');
       setDescription('');
       setTags('');
-      Alert.alert('Success', 'Post created successfully.');
+      Alert.alert('Erfolg', 'Beitrag erfolgreich erstellt.');
       navigation.goBack();
     } catch (error) {
-      Alert.alert('Error', 'Failed to create post.');
-      console.error('Error adding document: ', error);
+      Alert.alert('Fehler', 'Beitrag konnte nicht erstellt werden.');
+      console.error('Fehler beim Hinzufügen des Dokuments: ', error);
+    } finally {
+      setUploading(false);
     }
   };
 
   const pickMedia = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: false,
       quality: 1,
     });
 
-    if (!result.canceled) {
-      setMedia(result.assets[0].uri);
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      const selectedAsset = result.assets[0];
+      setMedia(selectedAsset.uri);
+      setMediaType(selectedAsset.mediaType);
+      setOriginalFileName(selectedAsset.fileName || null); 
+      
+      console.log("--- ImagePicker Result ---");
+      console.log("selectedAsset.uri:", selectedAsset.uri);
+      console.log("selectedAsset.mediaType (ImagePicker constant):", selectedAsset.mediaType);
+      console.log("selectedAsset.fileName (if available):", selectedAsset.fileName);
+      console.log("--------------------------");
     }
   };
 
@@ -111,44 +175,58 @@ const UploadScreen = () => {
     <View style={styles.container}>
       <TextInput
         style={styles.input}
-        placeholder="Title"
+        placeholder="Titel"
         placeholderTextColor="#aaa"
         value={title}
         onChangeText={setTitle}
       />
       <TextInput
         style={styles.input}
-        placeholder="Description"
+        placeholder="Beschreibung"
         placeholderTextColor="#aaa"
         value={description}
         onChangeText={setDescription}
       />
       <TextInput
         style={styles.input}
-        placeholder="Tags (e.g. #vacation #summer)"
+        placeholder="Tags (z.B. #urlaub #sommer)"
         placeholderTextColor="#aaa"
         value={tags}
         onChangeText={setTags}
       />
       <TextInput
-        style={styles.input}
-        placeholder="What would you like to post?"
+        style={[styles.input, { height: 80, textAlignVertical: 'top' }]}
+        placeholder="Was möchtest du posten?"
         placeholderTextColor="#aaa"
         value={postText}
         onChangeText={setPostText}
+        multiline
       />
       <TouchableOpacity style={styles.mediaButton} onPress={pickMedia}>
-        <Text style={styles.mediaButtonText}>Select Image/Video</Text>
+        <Text style={styles.mediaButtonText}>Bild/Video auswählen</Text>
       </TouchableOpacity>
       {media && (
-        media.includes('video') ? (
-          <Video source={{ uri: media }} style={styles.mediaPreview} useNativeControls />
+        mediaType === ImagePicker.MediaTypeOptions.Video || 
+        (originalFileName && originalFileName.toLowerCase().endsWith('.mp4')) || 
+        (media && media.toLowerCase().endsWith('.mp4')) ? (
+          <Video
+            source={{ uri: media }}
+            style={styles.mediaPreview}
+            useNativeControls
+            resizeMode={ResizeMode.CONTAIN}
+            isLooping={false}
+            shouldPlay={false}
+          />
         ) : (
           <Image source={{ uri: media }} style={styles.mediaPreview} />
         )
       )}
       <TouchableOpacity style={styles.postButton} onPress={handlePost} disabled={uploading}>
-        <Text style={styles.postButtonText}>{uploading ? 'Uploading...' : 'Post'}</Text>
+        {uploading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.postButtonText}>Posten</Text>
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -192,6 +270,7 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     alignItems: 'center',
+    marginTop: 10,
   },
   postButtonText: {
     color: '#fff',
