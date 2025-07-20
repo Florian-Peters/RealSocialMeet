@@ -19,7 +19,7 @@ const ProductDetailsScreen = ({ route }) => {
   const maxCharacterCount = 600;
 
   useEffect(() => {
-    const socketInstance = io('http://192.168.178.55:3001');
+    const socketInstance = io(Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://192.168.178.55:3001');
     setSocket(socketInstance);
 
     socketInstance.on('connect', () => {
@@ -86,7 +86,7 @@ const ProductDetailsScreen = ({ route }) => {
 
         formData.append('eventId', eventId);
 
-        const response = await fetch('http://192.168.178.55:3001/upload', {
+        const response = await fetch(Platform.OS === 'android' ? 'http://10.0.2.2:3001/upload' : 'http://192.168.178.55:3001/upload', {
           method: 'POST',
           body: formData,
           headers: {
