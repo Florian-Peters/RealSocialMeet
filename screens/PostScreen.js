@@ -107,7 +107,13 @@ const PostScreen = () => {
             <Text style={styles.postDescription}>{item.description}</Text>
             {item.media && (
               item.media.includes('video') ? (
-                <Video source={{ uri: item.media }} style={styles.postMedia} useNativeControls />
+                <Video
+                  source={{ uri: item.media }}
+                  style={styles.postMedia}
+                  useNativeControls
+                  resizeMode="contain"
+                  isLooping
+                />
               ) : (
                 <Image source={{ uri: item.media }} style={styles.postMedia} />
               )
