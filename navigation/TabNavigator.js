@@ -45,6 +45,7 @@ const TabNavigator = () => {
       <Tab.Screen name="ChatList" component={ChatListScreen} />
       <Tab.Screen name="EventShop" component={EventShopScreen} />
       <Tab.Screen name="Post" component={PostScreen} />
+      <Tab.Screen name="Chat" component={ChatComponent} />
     </Tab.Navigator>
   );
 };

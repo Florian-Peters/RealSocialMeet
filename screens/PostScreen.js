@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
 import { AntDesign, FontAwesome } from '@expo/vector-icons';
 import app from '../components/firebase';
 import { useNavigation } from '@react-navigation/native';
 import { Video } from 'expo-av';
 import { useUser } from '../UserContext';
+import Comment from '../components/Comment';
 
 const PostScreen = () => {
   const [posts, setPosts] = useState([]);
+  const [comments, setComments] = useState({});
+  const [commentText, setCommentText] = useState('');
   const auth = getAuth(app);
   const user = auth.currentUser;
   const navigation = useNavigation();
@@ -31,9 +34,18 @@ const PostScreen = () => {
     const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const newPosts = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        newPosts.push({ id: doc.id, ...data });
+      querySnapshot.forEach((postDoc) => {
+        const data = postDoc.data();
+        newPosts.push({ id: postDoc.id, ...data });
+
+        const commentsQuery = query(collection(db, 'posts', postDoc.id, 'comments'), orderBy('createdAt', 'desc'));
+        onSnapshot(commentsQuery, (commentsSnapshot) => {
+          const postComments = [];
+          commentsSnapshot.forEach((commentDoc) => {
+            postComments.push({ id: commentDoc.id, ...commentDoc.data() });
+          });
+          setComments(prevComments => ({ ...prevComments, [postDoc.id]: postComments }));
+        });
       });
       setPosts(newPosts);
     });
@@ -64,6 +76,21 @@ const PostScreen = () => {
     }
   };
 
+  const handleAddComment = async (postId) => {
+    if (commentText.trim() === '') return;
+
+    const db = getFirestore(app);
+    const commentData = {
+      text: commentText,
+      username: contextUser.username,
+      createdAt: serverTimestamp(),
+      userId: user.uid,
+    };
+
+    await addDoc(collection(db, 'posts', postId, 'comments'), commentData);
+    setCommentText('');
+  };
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -72,7 +99,9 @@ const PostScreen = () => {
         renderItem={({ item }) => (
           <View style={styles.post}>
             <View style={styles.postHeader}>
-              <Text style={styles.postUser}>{item.user.username}</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Profile', { userId: item.user.uid })}>
+                <Text style={styles.postUser}>{item.user.username}</Text>
+              </TouchableOpacity>
             </View>
             <Text style={styles.postTitle}>{item.title}</Text>
             <Text style={styles.postDescription}>{item.description}</Text>
@@ -90,8 +119,25 @@ const PostScreen = () => {
                 <AntDesign name="like2" size={24} color={item.likedBy?.includes(user.uid) ? '#FF1493' : '#ccc'} />
               </TouchableOpacity>
               <Text style={styles.likeCount}>{item.likes}</Text>
-              <TouchableOpacity onPress={() => Alert.alert('Comments', 'Comments will be displayed here.')}>
+              <TouchableOpacity onPress={() => {}}>
                 <FontAwesome name="comment-o" size={24} color="#ccc" />
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={comments[item.id] || []}
+              keyExtractor={(comment) => comment.id}
+              renderItem={({ item: comment }) => <Comment comment={comment} />}
+            />
+            <View style={styles.commentInputContainer}>
+              <TextInput
+                style={styles.commentInput}
+                placeholder="Add a comment..."
+                placeholderTextColor="#ccc"
+                value={commentText}
+                onChangeText={setCommentText}
+              />
+              <TouchableOpacity onPress={() => handleAddComment(item.id)}>
+                <Text style={styles.postButton}>Post</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -163,6 +209,23 @@ const styles = StyleSheet.create({
     bottom: 20,
     right: 20,
     zIndex: 1000,
+  },
+  commentInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  commentInput: {
+    flex: 1,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    padding: 8,
+    color: '#fff',
+  },
+  postButton: {
+    color: '#FF1493',
+    marginLeft: 8,
   },
 });
 

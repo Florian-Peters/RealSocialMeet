@@ -22,6 +22,7 @@ const RegisterScreen = () => {
             username: username,
             bio: bio,
             uid: user.uid,
+            balance: 0,
           });
           alert('Registrierung erfolgreich!');
           navigation.navigate('MainApp', { screen: 'MapView', params: { username } });

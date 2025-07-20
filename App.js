@@ -12,6 +12,7 @@ import { UserProvider } from './UserContext';
 import ProductDetailsScreen from './screens/ProductDetailsScreen';
 import UploadScreen from './screens/UploadScreen';
 import ChatComponent from './screens/ChatComponent';
+import ProfileScreen from './screens/ProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -55,6 +56,7 @@ const App = () => {
                 <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
                 <Stack.Screen name="Upload" component={UploadScreen} />
                 <Stack.Screen name="Chat" component={ChatComponent} />
+                <Stack.Screen name="Profile" component={ProfileScreen} />
               </>
             )}
           </Stack.Navigator>
