@@ -38,6 +38,7 @@ const EventShopScreen = ({ navigation }) => {
         querySnapshot.forEach((doc) => {
           productsData.push({ id: doc.id, ...doc.data() });
         });
+        console.log('Products data:', productsData);
         setProducts(productsData);
       });
       return unsubscribe;

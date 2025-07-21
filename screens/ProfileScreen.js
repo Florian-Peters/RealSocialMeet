@@ -1,34 +1,79 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity } from 'react-native';
 import { getFirestore, collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import app from '../components/firebase';
 import { Video } from 'expo-av';
+import { useUser } from '../UserContext';
 
-const ProfileScreen = ({ route }) => {
-  const { userId } = route.params;
+const ProfileScreen = ({ navigation, route }) => {
+  const { user: contextUser } = useUser();
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const db = getFirestore(app);
+  const [userId, setUserId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const userRef = doc(db, 'users', userId);
-    const unsubscribeUser = onSnapshot(userRef, (doc) => {
-      setUser({ id: doc.id, ...doc.data() });
-    });
+    if (route.params?.userId) {
+      setUserId(route.params.userId);
+    } else if (contextUser) {
+      setUserId(contextUser.uid);
+    }
+  }, [route.params?.userId, contextUser]);
 
-    const postsQuery = query(collection(db, 'posts'), where('user.uid', '==', userId));
-    const unsubscribePosts = onSnapshot(postsQuery, (querySnapshot) => {
-      const userPosts = [];
-      querySnapshot.forEach((doc) => {
-        userPosts.push({ id: doc.id, ...doc.data() });
+  useEffect(() => {
+    if (userId) {
+      const userRef = doc(db, 'users', userId);
+      const unsubscribeUser = onSnapshot(userRef, (doc) => {
+        setUser({ id: doc.id, ...doc.data() });
+        setLoading(false);
       });
-      setPosts(userPosts);
-    });
 
-    return () => {
-      unsubscribeUser();
-      unsubscribePosts();
-    };
+      const postsQuery = query(collection(db, 'posts'), where('user.uid', '==', userId));
+      const unsubscribePosts = onSnapshot(postsQuery, (querySnapshot) => {
+        const userPosts = [];
+        querySnapshot.forEach((doc) => {
+          userPosts.push({ id: doc.id, ...doc.data() });
+        });
+        setPosts(userPosts);
+      });
+
+      return () => {
+        unsubscribeUser();
+        unsubscribePosts();
+      };
+    }
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  useEffect(() => {
+    if (userId) {
+      const userRef = doc(db, 'users', userId);
+      const unsubscribeUser = onSnapshot(userRef, (doc) => {
+        setUser({ id: doc.id, ...doc.data() });
+      });
+
+      const postsQuery = query(collection(db, 'posts'), where('user.uid', '==', userId));
+      const unsubscribePosts = onSnapshot(postsQuery, (querySnapshot) => {
+        const userPosts = [];
+        querySnapshot.forEach((doc) => {
+          userPosts.push({ id: doc.id, ...doc.data() });
+        });
+        setPosts(userPosts);
+      });
+
+      return () => {
+        unsubscribeUser();
+        unsubscribePosts();
+      };
+    }
   }, [userId]);
 
   if (!user) {
@@ -43,6 +88,12 @@ const ProfileScreen = ({ route }) => {
     <View style={styles.container}>
       <Text style={styles.username}>{user.username}</Text>
       <Text style={styles.bio}>{user.bio}</Text>
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('TopUp')}>
+        <Text style={styles.buttonText}>Top Up Balance</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('EditProfile')}>
+        <Text style={styles.buttonText}>Edit Profile</Text>
+      </TouchableOpacity>
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -85,6 +136,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#FF1493',
+    borderRadius: 10,
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    marginBottom: 10,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
   post: {
     padding: 16,

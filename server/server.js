@@ -5,6 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const admin = require('firebase-admin');
+const ip = require('ip');
 
 var serviceAccount = require("./real-social-meet-firebase-adminsdk-d0v9e-ecabf53aa0.json");
 
@@ -126,18 +127,21 @@ app.post('/upload', upload.single('image'), (req, res) => {
 
   const { eventId } = req.body;
 
+  const serverIp = ip.address();
+  const imageUrl = `http://${serverIp}:3001/uploads/${req.file.filename}`;
+
   addEventLocation({
     latitude: latitude,
     longitude: longitude,
     eventname: req.body.eventname,
-    image: `http://192.168.178.55:3001/uploads/${req.file.filename}`,
+    image: imageUrl,
     eventId: eventId,
   });
 
   res.status(200).json({
     message: 'Image uploaded successfully',
     eventId: eventId,
-    imagePath: `http://192.168.178.55:3001/uploads/${req.file.filename}`,
+    imagePath: imageUrl,
   });
 });
 

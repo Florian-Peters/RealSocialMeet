@@ -13,6 +13,8 @@ import ProductDetailsScreen from './screens/ProductDetailsScreen';
 import UploadScreen from './screens/UploadScreen';
 import ChatComponent from './screens/ChatComponent';
 import ProfileScreen from './screens/ProfileScreen';
+import TopUpScreen from './screens/TopUpScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -57,6 +59,8 @@ const App = () => {
                 <Stack.Screen name="Upload" component={UploadScreen} />
                 <Stack.Screen name="Chat" component={ChatComponent} />
                 <Stack.Screen name="Profile" component={ProfileScreen} />
+                <Stack.Screen name="TopUp" component={TopUpScreen} />
+                <Stack.Screen name="EditProfile" component={EditProfileScreen} />
               </>
             )}
           </Stack.Navigator>

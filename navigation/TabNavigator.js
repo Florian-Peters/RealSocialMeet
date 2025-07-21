@@ -6,10 +6,16 @@ import ChatListScreen from '../screens/ChatListScreen';
 import EventShopScreen from '../screens/EventShopScreen';
 import PostScreen from '../screens/PostScreen';
 import ChatComponent from '../screens/ChatComponent'; // assuming it is a screen
+import ProfileScreen from '../screens/ProfileScreen';
+import { getAuth } from 'firebase/auth';
+import app from '../components/firebase';
 
 const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
+  const auth = getAuth(app);
+  const userId = auth.currentUser?.uid;
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -32,6 +38,9 @@ const TabNavigator = () => {
             case 'Chat':
               iconName = focused ? 'chatbox' : 'chatbox-outline';
               break;
+            case 'Profile':
+              iconName = focused ? 'person' : 'person-outline';
+              break;
           }
 
           return <Icon name={iconName} size={size} color={color} />;
@@ -46,6 +55,7 @@ const TabNavigator = () => {
       <Tab.Screen name="EventShop" component={EventShopScreen} />
       <Tab.Screen name="Post" component={PostScreen} />
       <Tab.Screen name="Chat" component={ChatComponent} />
+      <Tab.Screen name="Profile" component={ProfileScreen} initialParams={{ userId }} />
     </Tab.Navigator>
   );
 };
