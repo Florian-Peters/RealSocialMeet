@@ -218,8 +218,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   markerText: {
-    color: '#FF1493',
+    color: '#FF5C93',
     fontWeight: 'bold',
+    backgroundColor: 'rgba(28, 28, 28, 0.7)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   markerImage: {
     width: 60,
@@ -231,16 +236,19 @@ const styles = StyleSheet.create({
   },
   gpsToggleContainer: {
     position: 'absolute',
-    top: 10,
+    top: 40,
     right: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: '#1c1c1c',
     padding: 10,
-    borderRadius: 10,
+    borderRadius: 20,
+    borderColor: '#FF5C93',
+    borderWidth: 1,
   },
   gpsToggleText: {
     fontSize: 16,
     marginBottom: 5,
+    color: '#fff',
   },
 });
 

@@ -20,7 +20,7 @@ const styles = StyleSheet.create({
   chatName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#FF1493',
+    color: '#FF5C93',
   },
   chatMessage: {
     fontSize: 14,

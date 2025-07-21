@@ -24,7 +24,7 @@ const PostScreen = () => {
       headerStyle: {
         backgroundColor: '#1c1c1c',
       },
-      headerTintColor: '#FF1493',
+      headerTintColor: '#FF5C93',
       headerTitleStyle: {
         fontWeight: 'bold',
       },

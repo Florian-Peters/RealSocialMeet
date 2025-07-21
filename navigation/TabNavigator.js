@@ -39,9 +39,12 @@ const TabNavigator = () => {
 
           return <Icon name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#FF1493',
+        tabBarActiveTintColor: '#FF5C93',
         tabBarInactiveTintColor: 'gray',
-        tabBarStyle: { backgroundColor: '#1c1c1c' },
+        tabBarStyle: {
+          backgroundColor: '#1c1c1c',
+          borderTopColor: '#333'
+        },
       })}
     >
       <Tab.Screen name="MapView" component={MapViewScreen} options={{ headerShown: false }} />
