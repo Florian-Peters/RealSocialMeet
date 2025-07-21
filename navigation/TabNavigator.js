@@ -5,11 +5,14 @@ import MapViewScreen from '../screens/MapViewScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import EventShopScreen from '../screens/EventShopScreen';
 import PostScreen from '../screens/PostScreen';
-import ChatComponent from '../screens/ChatComponent'; // assuming it is a screen
+import ProfileScreen from '../screens/ProfileScreen'; // Import ProfileScreen
+import { useUser } from '../UserContext'; // Import useUser hook
 
 const Tab = createBottomTabNavigator();
 
 const TabNavigator = () => {
+  const { user } = useUser(); // Get user from context
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -29,8 +32,8 @@ const TabNavigator = () => {
             case 'Post':
               iconName = focused ? 'add-circle' : 'add-circle-outline';
               break;
-            case 'Chat':
-              iconName = focused ? 'chatbox' : 'chatbox-outline';
+            case 'Profile': // Add case for Profile
+              iconName = focused ? 'person' : 'person-outline';
               break;
           }
 
@@ -45,7 +48,11 @@ const TabNavigator = () => {
       <Tab.Screen name="ChatList" component={ChatListScreen} />
       <Tab.Screen name="EventShop" component={EventShopScreen} />
       <Tab.Screen name="Post" component={PostScreen} />
-      <Tab.Screen name="Chat" component={ChatComponent} />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        initialParams={{ userId: user ? user.uid : null }} // Pass userId as a parameter
+      />
     </Tab.Navigator>
   );
 };
