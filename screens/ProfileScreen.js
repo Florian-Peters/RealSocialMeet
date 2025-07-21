@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity } from 'react-native';
-import { getFirestore, collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Button, TextInput } from 'react-native';
+import { getFirestore, collection, query, where, onSnapshot, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
 import app from '../components/firebase';
 import { Video } from 'expo-av';
 
@@ -8,6 +10,7 @@ const ProfileScreen = ({ route }) => {
   const { userId } = route.params;
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
+  const [isEditMode, setIsEditMode] = useState(false);
   const db = getFirestore(app);
 
   useEffect(() => {
@@ -31,6 +34,35 @@ const ProfileScreen = ({ route }) => {
     };
   }, [userId]);
 
+  const handleUpdate = async () => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      username: user.username,
+      bio: user.bio,
+    });
+    setIsEditMode(false);
+  };
+
+  const handleImagePick = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    if (!result.cancelled) {
+      const storage = getStorage(app);
+      const response = await fetch(result.uri);
+      const blob = await response.blob();
+      const storageRef = ref(storage, `profile-pictures/${userId}`);
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, { profilePicture: downloadURL });
+    }
+  };
+
   if (!user) {
     return (
       <View style={styles.container}>
@@ -41,8 +73,29 @@ const ProfileScreen = ({ route }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.username}>{user.username}</Text>
-      <Text style={styles.bio}>{user.bio}</Text>
+      <Image source={{ uri: user.profilePicture }} style={styles.profilePicture} />
+      <Button title={isEditMode ? "Cancel" : "Edit"} onPress={() => setIsEditMode(!isEditMode)} />
+      {isEditMode ? (
+        <>
+          <Button title="Change Profile Picture" onPress={handleImagePick} />
+          <TextInput
+            style={styles.input}
+            value={user.username}
+            onChangeText={(text) => setUser({ ...user, username: text })}
+          />
+          <TextInput
+            style={styles.input}
+            value={user.bio}
+            onChangeText={(text) => setUser({ ...user, bio: text })}
+          />
+          <Button title="Save" onPress={handleUpdate} />
+        </>
+      ) : (
+        <>
+          <Text style={styles.username}>{user.username}</Text>
+          <Text style={styles.bio}>{user.bio}</Text>
+        </>
+      )}
       <FlatList
         data={posts}
         keyExtractor={(item) => item.id}
@@ -116,6 +169,19 @@ const styles = StyleSheet.create({
     height: 300,
     marginTop: 8,
     borderRadius: 10,
+  },
+  input: {
+    backgroundColor: '#fff',
+    padding: 10,
+    marginVertical: 10,
+    borderRadius: 5,
+  },
+  profilePicture: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignSelf: 'center',
+    marginBottom: 20,
   },
 });
 
