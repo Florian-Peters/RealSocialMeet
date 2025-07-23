@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import io from 'socket.io-client';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import MapView, { Marker } from 'react-native-maps';  
 import uuid from 'react-native-uuid';
@@ -13,22 +14,11 @@ const ProductDetailsScreen = ({ route }) => {
   const [eventname, setEventname] = useState('');
   const [latitude, setLatitude] = useState(null);
   const [longitude, setLongitude] = useState(null);
-  const [socket, setSocket] = useState(null);
   const [image, setImage] = useState(null);
   const [eventDescription, setEventDescription] = useState('');
   const maxCharacterCount = 600;
 
   useEffect(() => {
-    const socketInstance = io(Platform.OS === 'android' ? 'http://10.0.2.2:3001' : 'http://192.168.178.55:3001');
-    setSocket(socketInstance);
-
-    socketInstance.on('connect', () => {
-      console.log('Connected to server');
-    });
-
-    return () => {
-      socketInstance.disconnect();
-    };
   }, []);
 
   useEffect(() => {
@@ -67,57 +57,35 @@ const ProductDetailsScreen = ({ route }) => {
       if (image && latitude !== null && longitude !== null) {
         console.log('Image and location are set');
 
-        let localUri = image;
-        let filename = localUri.split('/').pop();
+        const functions = getFunctions();
+        const createEvent = httpsCallable(functions, 'createEvent');
 
-        let match = /\.(\w+)$/.exec(filename);
-        let type = match ? `image/${match[1]}` : `image`;
-
-        let formData = new FormData();
-        formData.append('image', { uri: localUri, name: filename, type });
-        formData.append('latitude', latitude.toString());
-        formData.append('longitude', longitude.toString());
-        formData.append('eventDescription', eventDescription);
-        formData.append('eventname', eventname);
-        formData.append('duration', duration);
+        const storage = getStorage();
+        const response = await fetch(image);
+        const blob = await response.blob();
+        const imageRef = ref(storage, `event-images/${uuid.v4()}`);
+        await uploadBytes(imageRef, blob);
+        const imageUrl = await getDownloadURL(imageRef);
 
         const eventId = uuid.v4();
         console.log(`Generated eventId: ${eventId}`);
 
-        formData.append('eventId', eventId);
-
-        const response = await fetch(Platform.OS === 'android' ? 'http://10.0.2.2:3001/upload' : 'http://192.168.178.55:3001/upload', {
-          method: 'POST',
-          body: formData,
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
+        await createEvent({
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+          duration,
+          eventname,
+          image: imageUrl,
+          eventId,
+          eventDescription,
         });
-
-        const data = await response.text();
-        console.log('Image upload response:', data);
-
-        const jsonData = JSON.parse(data);
-        console.log('Parsed JSON response:', jsonData);
-
-        if (socket && socket.connected) {
-          socket.emit('confirmPurchase', {
-            latitude: parseFloat(latitude),
-            longitude: parseFloat(longitude),
-            duration,
-            eventname,
-            image: jsonData.imagePath,
-            eventId,
-            eventDescription,
-          });
-        }
 
         navigation.navigate('MapView');
       } else {
         console.log('Please select an image, choose a location on the map, and provide an event description');
       }
     } catch (error) {
-      console.error('Image upload error:', error);
+      console.error('Cloud function error:', error);
     }
   };
 
