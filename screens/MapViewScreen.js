@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Image, Text, Switch } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import io from 'socket.io-client';
 import * as Location from 'expo-location';
-import { getFirestore, query, where, getDocs, collection } from 'firebase/firestore';
-import app from '../components/firebase';
+import { getFirestore, query, where, getDocs, collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { app, db } from '../components/firebase';
 import { useUser } from '../UserContext';
 
 const MapViewScreen = ({ navigation }) => {
@@ -20,31 +19,23 @@ const MapViewScreen = ({ navigation }) => {
   const [region, setRegion] = useState(null);
   const [loading, setLoading] = useState(false);
   const locationSubscription = useRef(null);
-  const socketRef = useRef(null);
 
   useEffect(() => {
-    socketRef.current = io('http://192.168.178.55:3001');
-
-    socketRef.current.on('connect', () => {});
-
-    socketRef.current.on('updateEventLocations', (updatedEventLocations) => {
-      setEventLocations(updatedEventLocations);
+    const locationsCollection = collection(db, 'locations');
+    const unsubscribeLocations = onSnapshot(locationsCollection, (snapshot) => {
+      const locations = snapshot.docs.map(doc => doc.data());
+      setUserLocations(locations);
     });
 
-    socketRef.current.on('updateLocation', (data) => {
-      setUserLocations(data);
-    });
-
-    socketRef.current.on('eventEnded', (data) => {
-      const { eventId } = data;
-      const updatedEventLocations = eventLocations.filter((event) => event.eventId !== eventId);
-      setEventLocations(updatedEventLocations);
+    const eventsCollection = collection(db, 'events');
+    const unsubscribeEvents = onSnapshot(eventsCollection, (snapshot) => {
+      const events = snapshot.docs.map(doc => doc.data());
+      setEventLocations(events);
     });
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
+      unsubscribeLocations();
+      unsubscribeEvents();
     };
   }, []);
 
@@ -60,7 +51,7 @@ const MapViewScreen = ({ navigation }) => {
         timeInterval: 8000,
         distanceInterval: 10,
       },
-      (location) => {
+      async (location) => {
         const { latitude, longitude } = location.coords;
 
         const userLocationData = {
@@ -71,9 +62,11 @@ const MapViewScreen = ({ navigation }) => {
           gpsEnabled,
         };
 
-        if (socketRef.current) {
-          socketRef.current.emit('updateLocation', userLocationData);
+        if (username) {
+          const locationDocRef = doc(db, 'locations', username);
+          await setDoc(locationDocRef, userLocationData);
         }
+
         setMyLocation(userLocationData);
       }
     );
@@ -86,15 +79,9 @@ const MapViewScreen = ({ navigation }) => {
         locationSubscription.current.remove();
         locationSubscription.current = null;
       }
-      const userLocationData = { 
-        latitude: null, 
-        longitude: null, 
-        username, 
-        image: null, 
-        gpsEnabled: false 
-      };
-      if (socketRef.current) {
-        socketRef.current.emit('updateLocation', userLocationData);
+      if (username) {
+        const locationDocRef = doc(db, 'locations', username);
+        await deleteDoc(locationDocRef);
       }
       setMyLocation(null);
     } else {
