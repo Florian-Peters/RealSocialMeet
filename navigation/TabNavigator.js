@@ -1,12 +1,13 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
+import DiscoverScreen from '../screens/DiscoverScreen';
 import MapViewScreen from '../screens/MapViewScreen';
 import ChatListScreen from '../screens/ChatListScreen';
 import EventShopScreen from '../screens/EventShopScreen';
 import PostScreen from '../screens/PostScreen';
-import ProfileScreen from '../screens/ProfileScreen'; // Import ProfileScreen
-import { useUser } from '../UserContext'; // Import useUser hook
+import ProfileScreen from '../screens/ProfileScreen';
+import { useUser } from '../UserContext';
 
 const Tab = createBottomTabNavigator();
 
@@ -15,11 +16,15 @@ const TabNavigator = () => {
 
   return (
     <Tab.Navigator
+      initialRouteName="Discover"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
           switch (route.name) {
+            case 'Discover':
+              iconName = focused ? 'planet' : 'planet-outline';
+              break;
             case 'MapView':
               iconName = focused ? 'map' : 'map-outline';
               break;
@@ -47,6 +52,7 @@ const TabNavigator = () => {
         },
       })}
     >
+      <Tab.Screen name="Discover" component={DiscoverScreen} options={{ headerShown: false }} />
       <Tab.Screen name="MapView" component={MapViewScreen} options={{ headerShown: false }} />
       <Tab.Screen name="ChatList" component={ChatListScreen} />
       <Tab.Screen name="EventShop" component={EventShopScreen} />

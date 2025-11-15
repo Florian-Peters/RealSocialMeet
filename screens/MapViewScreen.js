@@ -1,43 +1,61 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Image, Text, Switch } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Image, StyleSheet, Switch, Text, View } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { getFirestore, query, where, getDocs, collection, doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { getFirestore, query, where, getDocs, collection, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { app, db } from '../components/firebase';
 import { useUser } from '../UserContext';
+import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
 
-const MapViewScreen = ({ navigation }) => {
+const MapViewScreen = ({ navigation, route }) => {
   const { user } = useUser();
   const username = user ? user.username : '';
 
-  const [userLocations, setUserLocations] = useState([]);
-  const [eventLocations, setEventLocations] = useState([]);
   const [myLocation, setMyLocation] = useState(null);
   const [mapReady, setMapReady] = useState(false);
   const [gpsEnabled, setGpsEnabled] = useState(true);
   const [initialRegionSet, setInitialRegionSet] = useState(false);
   const [region, setRegion] = useState(null);
-  const [loading, setLoading] = useState(false);
   const locationSubscription = useRef(null);
+  const highlightEventId = route?.params?.highlightEventId;
+
+  const { data: userLocations } = useFirestoreCollection('locations');
+  const { data: eventLocations } = useFirestoreCollection('events');
+
+  const defaultRegion = useMemo(
+    () => ({
+      latitude: 52.52,
+      longitude: 13.405,
+      latitudeDelta: 0.5,
+      longitudeDelta: 0.5,
+    }),
+    []
+  );
+  const activeUsers = useMemo(
+    () => userLocations.filter((location) => location.gpsEnabled !== false),
+    [userLocations]
+  );
+  const eventCount = eventLocations.length;
 
   useEffect(() => {
-    const locationsCollection = collection(db, 'locations');
-    const unsubscribeLocations = onSnapshot(locationsCollection, (snapshot) => {
-      const locations = snapshot.docs.map(doc => doc.data());
-      setUserLocations(locations);
-    });
+    if (!highlightEventId) {
+      return;
+    }
 
-    const eventsCollection = collection(db, 'events');
-    const unsubscribeEvents = onSnapshot(eventsCollection, (snapshot) => {
-      const events = snapshot.docs.map(doc => doc.data());
-      setEventLocations(events);
-    });
-
-    return () => {
-      unsubscribeLocations();
-      unsubscribeEvents();
-    };
-  }, []);
+    const eventToHighlight = eventLocations.find((event) => event.id === highlightEventId);
+    if (eventToHighlight?.latitude && eventToHighlight?.longitude) {
+      setRegion({
+        latitude: eventToHighlight.latitude,
+        longitude: eventToHighlight.longitude,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      });
+      setInitialRegionSet(true);
+      setMapReady(true);
+      navigation.setParams?.({ highlightEventId: undefined });
+      Alert.alert(eventToHighlight.eventname || 'Event', eventToHighlight.eventDescription || '');
+    }
+  }, [highlightEventId, eventLocations, navigation]);
 
   const watchLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
@@ -103,7 +121,7 @@ const MapViewScreen = ({ navigation }) => {
   }, [username, gpsEnabled]);
 
   const handleMarkerPressEvent = (event) => {
-    alert(event.eventDescription);
+    Alert.alert(event.eventname || 'Event', event.eventDescription || '');
   };
 
   const handleMarkerPress = async (user) => {
@@ -111,7 +129,6 @@ const MapViewScreen = ({ navigation }) => {
       const userId = await getUserIdByUsername(user.username);
       if (userId) {
         const userWithUid = { ...user, uid: userId };
-        console.log('Navigating with selectedUser:', userWithUid);
         navigation.navigate('Chat', { selectedUser: userWithUid });
       } else {
         console.warn('Benutzer nicht gefunden.');
@@ -141,66 +158,82 @@ const MapViewScreen = ({ navigation }) => {
     }
   }, [initialRegionSet, myLocation]);
 
+  const mapRegion = region ??
+    (myLocation
+      ? {
+          latitude: myLocation.latitude,
+          longitude: myLocation.longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }
+      : defaultRegion);
+
   return (
-    <View style={{ flex: 1 }}>
-      {loading ? (
-        <ActivityIndicator />
-      ) : (
-        <>
-          <MapView
-            style={{ flex: 1 }}
-            initialRegion={region}
-            onLayout={() => {
-              setMapReady(true);
-              if (myLocation) {
-                setInitialRegionSet(true);
-              }
-            }}
+    <View style={styles.container}>
+      <MapView
+        style={styles.map}
+        initialRegion={mapRegion}
+        region={region ?? undefined}
+        onLayout={() => {
+          setMapReady(true);
+          if (myLocation) {
+            setInitialRegionSet(true);
+          }
+        }}
+      >
+        {mapReady &&
+          eventLocations.map((event) => (
+            <Marker
+              key={event.id ?? `${event.latitude}-${event.longitude}`}
+              coordinate={{ latitude: event.latitude, longitude: event.longitude }}
+              onPress={() => handleMarkerPressEvent(event)}
+            >
+              <View style={styles.markerContainer}>
+                <Text style={styles.markerText}>{event.eventname}</Text>
+                {event.image ? <Image source={{ uri: event.image }} style={styles.markerImage} /> : null}
+              </View>
+            </Marker>
+          ))}
+        {mapReady &&
+          userLocations.map((user) => (
+            <Marker
+              key={user.username ?? `${user.latitude}-${user.longitude}`}
+              coordinate={{ latitude: user.latitude, longitude: user.longitude }}
+              title={user.username}
+              onPress={() => handleMarkerPress(user)}
+            >
+              {user.image ? <Image source={{ uri: user.image }} style={styles.userImage} /> : null}
+            </Marker>
+          ))}
+        {mapReady && myLocation && gpsEnabled && (
+          <Marker
+            coordinate={{ latitude: myLocation.latitude, longitude: myLocation.longitude }}
+            title={`Mein Standort (${username})`}
           >
-            {mapReady &&
-              eventLocations.map((event, index) => (
-                <Marker
-                  key={index}
-                  coordinate={{ latitude: event.latitude, longitude: event.longitude }}
-                  onPress={() => handleMarkerPressEvent(event)}
-                >
-                  <View style={styles.markerContainer}>
-                    <Text style={styles.markerText}>{event.eventname}</Text>
-                    <Image source={{ uri: event.image }} style={styles.markerImage} />
-                  </View>
-                </Marker>
-              ))}
-            {mapReady &&
-              userLocations.map((user, index) => (
-                <Marker
-                  key={index}
-                  coordinate={{ latitude: user.latitude, longitude: user.longitude }}
-                  title={user.username}
-                  onPress={() => handleMarkerPress(user)}
-                >
-                  {user.image && <Image source={{ uri: user.image }} style={styles.userImage} />}
-                </Marker>
-              ))}
-            {mapReady && myLocation && gpsEnabled && (
-              <Marker
-                coordinate={{ latitude: myLocation.latitude, longitude: myLocation.longitude }}
-                title={`Mein Standort (${username})`}
-              >
-                <Image source={require('../assets/NadelGeojam.png')} style={styles.userImage} />
-              </Marker>
-            )}
-          </MapView>
-          <View style={styles.gpsToggleContainer}>
-            <Text style={styles.gpsToggleText}>GPS {gpsEnabled ? 'EIN' : 'AUS'}</Text>
-            <Switch value={gpsEnabled} onValueChange={handleToggleGPS} />
-          </View>
-        </>
-      )}
+            <Image source={require('../assets/NadelGeojam.png')} style={styles.userImage} />
+          </Marker>
+        )}
+      </MapView>
+      <View style={styles.gpsToggleContainer}>
+        <Text style={styles.gpsToggleText}>GPS {gpsEnabled ? 'EIN' : 'AUS'}</Text>
+        <Switch value={gpsEnabled} onValueChange={handleToggleGPS} />
+      </View>
+      <View style={styles.mapSummary}>
+        <Text style={styles.summaryText}>Events: {eventCount}</Text>
+        <Text style={styles.summaryText}>Freunde online: {activeUsers.length}</Text>
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  map: {
+    flex: 1,
+  },
   markerContainer: {
     alignItems: 'center',
   },
@@ -218,8 +251,8 @@ const styles = StyleSheet.create({
     height: 60,
   },
   userImage: {
-    width: 80,
-    height: 80,
+    width: 72,
+    height: 72,
   },
   gpsToggleContainer: {
     position: 'absolute',
@@ -236,6 +269,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 5,
     color: '#fff',
+  },
+  mapSummary: {
+    position: 'absolute',
+    bottom: 32,
+    left: 20,
+    right: 20,
+    padding: 14,
+    borderRadius: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderWidth: 1,
+    borderColor: '#FF5C93',
+  },
+  summaryText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 

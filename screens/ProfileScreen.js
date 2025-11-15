@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, TextInput, ScrollView, Dimensions, ActivityIndicator, Alert, StatusBar } from 'react-native';
-import { getFirestore, collection, query, where, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
-import app from '../components/firebase';
 import { Video, ResizeMode } from 'expo-av';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { getAuth } from 'firebase/auth';
 import { useNavigation } from '@react-navigation/native';
+import { app, auth, db, storage } from '../components/firebase';
 
 const { width } = Dimensions.get('window');
 
@@ -29,8 +28,6 @@ const ProfileScreen = ({ route }) => {
   const [posts, setPosts] = useState([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedTab, setSelectedTab] = useState('videos');
-  const db = getFirestore(app);
-  const auth = getAuth(app);
   const currentUser = auth.currentUser;
 
   useEffect(() => {
@@ -99,7 +96,6 @@ const ProfileScreen = ({ route }) => {
     });
 
     if (!result.canceled) {
-      const storage = getStorage(app);
       const response = await fetch(result.assets[0].uri);
       const blob = await response.blob();
       const storageRef = ref(storage, `profile-pictures/${userId}`);
