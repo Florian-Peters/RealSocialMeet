@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Platform, KeyboardAvoidingView, Keyboard } from 'react-native';
 import { GiftedChat, Bubble, InputToolbar, Composer, Send } from 'react-native-gifted-chat';
-import { getFirestore, collection, addDoc, query, onSnapshot, orderBy, where, doc, getDoc } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import app from '../components/firebase';
+import { collection, addDoc, query, onSnapshot, orderBy, where, doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../components/firebase';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 const styles = StyleSheet.create({
@@ -33,7 +32,6 @@ const styles = StyleSheet.create({
 const ChatComponent = () => {
   const [messages, setMessages] = useState([]);
   const [username, setUsername] = useState('');
-  const auth = getAuth(app);
   const user = auth.currentUser;
   const navigation = useNavigation();
   const route = useRoute();
@@ -54,7 +52,7 @@ const ChatComponent = () => {
       const fetchMessages = async () => {
         if (user && selectedUser) {
           const q = query(
-            collection(getFirestore(app), 'messages'),
+            collection(db, 'messages'),
             orderBy('createdAt', 'desc'),
             where('user._id', 'in', [user.uid, selectedUser.uid]),
             where('receiver._id', 'in', [user.uid, selectedUser.uid])
@@ -91,7 +89,6 @@ const ChatComponent = () => {
   const handleSend = async (newMessages = []) => {
     if (user && selectedUser) {
       const text = newMessages[0].text;
-      const db = getFirestore(app);
       const docRef = doc(db, 'users', user.uid);
       getDoc(docRef)
         .then((docSnap) => {

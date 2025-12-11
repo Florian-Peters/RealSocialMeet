@@ -1,51 +1,18 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, FlatList, TouchableOpacity, Alert } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc, updateDoc, collection, query, onSnapshot } from 'firebase/firestore';
-import { useUser } from '../UserContext';
-import app from '../components/firebase';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import ProductCard from '../components/ProductCard';
+import { auth, db } from '../components/firebase';
+import { useFirestoreCollection } from '../hooks/useFirestoreCollection';
 
 const EventShopScreen = ({ navigation }) => {
-  const [socket, setSocket] = useState(null);
-  const [username, setUsername] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [userLocations, setUserLocations] = useState([]);
   const [balance, setBalance] = useState(0);
-  const [products, setProducts] = useState([]);
-  const eventUsernameRef = useRef('');
-  const { user: contextUser } = useUser();
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+  const [processingProductId, setProcessingProductId] = useState(null);
   const user = auth.currentUser;
 
+  const { data: products, loading: loadingProducts } = useFirestoreCollection('products');
+
   useEffect(() => {
-    const fetchBalance = async () => {
-      if (user) {
-        const userRef = doc(db, 'users', user.uid);
-        const userDoc = await getDoc(userRef);
-        if (userDoc.exists()) {
-          setBalance(userDoc.data().balance);
-        }
-      }
-    };
-
-    const fetchProducts = () => {
-      const q = query(collection(db, 'products'));
-      const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const productsData = [];
-        querySnapshot.forEach((doc) => {
-          productsData.push({ id: doc.id, ...doc.data() });
-        });
-        setProducts(productsData);
-      });
-      return unsubscribe;
-    };
-
-    fetchBalance();
-    const unsubscribeProducts = fetchProducts();
-
     navigation.setOptions({
       title: 'Event Shop',
       headerStyle: {
@@ -56,63 +23,87 @@ const EventShopScreen = ({ navigation }) => {
         fontWeight: 'bold',
       },
     });
+  }, [navigation]);
 
-    return () => {
-      unsubscribeProducts();
-    };
-  }, [navigation, user]);
+  useEffect(() => {
+    if (!user?.uid) {
+      setBalance(0);
+      return undefined;
+    }
+
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
+      setBalance(snapshot.exists() ? snapshot.data().balance ?? 0 : 0);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  const sortedProducts = useMemo(
+    () => [...products].sort((a, b) => (a.price ?? 0) - (b.price ?? 0)),
+    [products]
+  );
 
   const handleProductPress = async (product) => {
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to make a purchase.');
+    if (!user?.uid) {
+      Alert.alert('Fehler', 'Bitte melde dich an, um Produkte zu kaufen.');
       return;
     }
 
-    const userRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userRef);
+    setProcessingProductId(product.id);
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
 
-    if (userDoc.exists()) {
-      const userData = userDoc.data();
-      if (userData.balance >= product.price) {
-        const newBalance = userData.balance - product.price;
-        await updateDoc(userRef, { balance: newBalance });
-        Alert.alert('Success', `You have successfully purchased ${product.name}.`);
-        // Here you would typically add the purchased item to the user's inventory
-      } else {
-        Alert.alert('Error', 'You do not have enough balance to make this purchase.');
+      if (!userDoc.exists()) {
+        Alert.alert('Fehler', 'Benutzerkonto nicht gefunden.');
+        return;
       }
-    } else {
-      Alert.alert('Error', 'Could not find user data.');
+
+      const currentBalance = userDoc.data().balance ?? 0;
+      if (currentBalance < (product.price ?? 0)) {
+        Alert.alert('Fehler', 'Dein Kontostand reicht nicht aus.');
+        return;
+      }
+
+      const newBalance = currentBalance - (product.price ?? 0);
+      await updateDoc(userRef, { balance: newBalance });
+      Alert.alert('Erfolg', `Du hast ${product.name} gekauft.`);
+    } catch (error) {
+      console.error('Purchase failed:', error);
+      Alert.alert('Fehler', 'Beim Kauf ist etwas schiefgelaufen.');
+    } finally {
+      setProcessingProductId(null);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.balanceText}>Balance: {balance}</Text>
-      <FlatList
-        data={products}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.itemContainer}>
-            <View style={styles.imageContainer}>
-              <Image source={{ uri: item.image }} style={styles.itemImage} />
+      <Text style={styles.balanceText}>Kontostand: {balance}</Text>
+      {loadingProducts ? (
+        <ActivityIndicator style={styles.loader} color="#FF5C93" />
+      ) : (
+        <FlatList
+          data={sortedProducts}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <ProductCard
+              product={item}
+              onBuyPress={handleProductPress}
+              onDetailsPress={(product) => navigation.navigate('ProductDetails', { product })}
+              disabled={processingProductId === item.id}
+            />
+          )}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateTitle}>Noch keine Produkte</Text>
+              <Text style={styles.emptyStateDescription}>
+                Schau später wieder vorbei oder füge neue Produkte im Admin-Bereich hinzu.
+              </Text>
             </View>
-            <Text style={styles.itemName}>{item.name}</Text>
-            <View style={styles.priceContainer}>
-              <Text style={styles.itemPrice}>{item.price}</Text>
-            </View>
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.itemDescription}>{item.description}</Text>
-            </View>
-            <TouchableOpacity style={styles.buyButton} onPress={() => handleProductPress(item)}>
-              <Text style={styles.buyButtonText}>BUY</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.detailsButton} onPress={() => navigation.navigate('ProductDetails', { product: item })}>
-              <Text style={styles.detailsButtonText}>View Details</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      />
+          }
+        />
+      )}
     </View>
   );
 };
@@ -128,59 +119,28 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#FF5C93',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
-  itemContainer: {
-    padding: 20,
-    marginVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#333',
+  listContent: {
+    paddingBottom: 24,
   },
-  itemImage: {
-    width: '100%',
-    height: 180,
-    borderRadius: 10,
-    marginBottom: 15,
+  loader: {
+    marginTop: 40,
   },
-  itemName: {
-    fontSize: 22,
-    fontWeight: 'bold',
+  emptyState: {
+    marginTop: 80,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  emptyStateTitle: {
     color: '#fff',
-  },
-  itemPrice: {
     fontSize: 18,
-    color: '#FF5C93',
-    marginVertical: 10,
+    fontWeight: 'bold',
   },
-  itemDescription: {
-    fontSize: 14,
+  emptyStateDescription: {
     color: '#aaa',
-    marginBottom: 15,
-  },
-  buyButton: {
-    backgroundColor: '#FF5C93',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  buyButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  detailsButton: {
-    marginTop: 10,
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderColor: '#FF5C93',
-    borderWidth: 1,
-  },
-  detailsButtonText: {
-    color: '#FF5C93',
-    fontSize: 16,
-    fontWeight: 'bold',
+    marginTop: 8,
+    textAlign: 'center',
   },
 });
 

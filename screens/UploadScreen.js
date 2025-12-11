@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
+import { collection, addDoc } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Video } from 'expo-av';
-import app from '../components/firebase';
 import { useUser } from '../UserContext';
+import { db, storage } from '../components/firebase';
 
 const UploadScreen = () => {
   const [postText, setPostText] = useState('');
@@ -37,9 +37,6 @@ const UploadScreen = () => {
       Alert.alert('Error', 'Please add some text or an image/video.');
       return;
     }
-
-    const db = getFirestore(app);
-    const storage = getStorage(app);
 
     let mediaUrl = null;
     if (media) {

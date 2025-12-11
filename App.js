@@ -45,13 +45,17 @@ const App = () => {
     <UserProvider>
       <GpsProvider>
         <NavigationContainer>
-          <Stack.Navigator initialRouteName="Intro">
+          <Stack.Navigator initialRouteName={showIntro ? 'Intro' : user ? 'MainApp' : 'Login'}>
             {showIntro ? (
               <Stack.Screen name="Intro" component={IntroScreen} options={{ headerShown: false }} />
             ) : (
               <>
-                <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
-                <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
+                {!user && (
+                  <>
+                    <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+                    <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
+                  </>
+                )}
                 <Stack.Screen name="MainApp" component={TabNavigator} options={{ headerShown: false }} />
                 <Stack.Screen name="ProductDetails" component={ProductDetailsScreen} />
                 <Stack.Screen name="Upload" component={UploadScreen} />

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { getFirestore, collection, query, onSnapshot, where, orderBy, getDocs } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import app from '../components/firebase';
+import { collection, query, onSnapshot, where, orderBy, getDocs } from 'firebase/firestore';
+import { auth, db } from '../components/firebase';
 import { useNavigation } from '@react-navigation/native';
 
 const styles = StyleSheet.create({
@@ -38,9 +37,21 @@ const styles = StyleSheet.create({
   },
 });
 
+const formatDate = (isoString) => {
+  if (!isoString) {
+    return '';
+  }
+
+  try {
+    const date = new Date(isoString);
+    return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  } catch (error) {
+    return isoString;
+  }
+};
+
 const ChatListScreen = ({ navigation }) => {
   const [chats, setChats] = useState([]);
-  const auth = getAuth(app);
   const user = auth.currentUser;
 
   useEffect(() => {
@@ -54,7 +65,6 @@ const ChatListScreen = ({ navigation }) => {
     });
 
     if (user) {
-      const db = getFirestore(app);
       const q = query(
         collection(db, 'messages'),
         where('user._id', '==', user.uid),
@@ -111,7 +121,7 @@ const ChatListScreen = ({ navigation }) => {
   };
 
   const getUserIdByUsername = async (username) => {
-    const usersCollection = collection(getFirestore(app), 'users');
+    const usersCollection = collection(db, 'users');
     const userQuery = query(usersCollection, where('username', '==', username));
     const userSnapshot = await getDocs(userQuery);
     return userSnapshot.docs.length > 0 ? userSnapshot.docs[0].data().uid : null;
@@ -130,7 +140,7 @@ const ChatListScreen = ({ navigation }) => {
           >
             <Text style={styles.chatName}>{chat.name}</Text>
             <Text style={styles.chatMessage}>{chat.lastMessage}</Text>
-            <Text style={styles.chatDate}>{chat.createdAt}</Text>
+            <Text style={styles.chatDate}>{formatDate(chat.createdAt)}</Text>
           </TouchableOpacity>
         ))
       )}

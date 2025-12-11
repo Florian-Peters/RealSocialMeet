@@ -1,22 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity, Alert, TextInput } from 'react-native';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Image, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, getDoc, arrayUnion, arrayRemove, addDoc, serverTimestamp } from 'firebase/firestore';
 import { AntDesign, FontAwesome } from '@expo/vector-icons';
-import app from '../components/firebase';
 import { useNavigation } from '@react-navigation/native';
 import { Video } from 'expo-av';
 import { useUser } from '../UserContext';
+import { auth, db } from '../components/firebase';
 import Comment from '../components/Comment';
 
 const PostScreen = () => {
   const [posts, setPosts] = useState([]);
   const [comments, setComments] = useState({});
   const [commentText, setCommentText] = useState('');
-  const auth = getAuth(app);
   const user = auth.currentUser;
   const navigation = useNavigation();
   const { user: contextUser } = useUser();
+  const commentUnsubscribersRef = useRef({});
 
   useEffect(() => {
     navigation.setOptions({
@@ -30,31 +29,50 @@ const PostScreen = () => {
       },
     });
 
-    const db = getFirestore(app);
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const newPosts = [];
-      querySnapshot.forEach((postDoc) => {
-        const data = postDoc.data();
-        newPosts.push({ id: postDoc.id, ...data });
+    const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+    const unsubscribePosts = onSnapshot(postsQuery, (querySnapshot) => {
+      const nextPosts = querySnapshot.docs.map((postDoc) => ({ id: postDoc.id, ...postDoc.data() }));
+      setPosts(nextPosts);
 
-        const commentsQuery = query(collection(db, 'posts', postDoc.id, 'comments'), orderBy('createdAt', 'desc'));
-        onSnapshot(commentsQuery, (commentsSnapshot) => {
-          const postComments = [];
-          commentsSnapshot.forEach((commentDoc) => {
-            postComments.push({ id: commentDoc.id, ...commentDoc.data() });
+      const activePostIds = new Set(querySnapshot.docs.map((docSnapshot) => docSnapshot.id));
+
+      querySnapshot.docs.forEach((postDoc) => {
+        if (!commentUnsubscribersRef.current[postDoc.id]) {
+          const commentsQuery = query(
+            collection(db, 'posts', postDoc.id, 'comments'),
+            orderBy('createdAt', 'desc')
+          );
+          commentUnsubscribersRef.current[postDoc.id] = onSnapshot(commentsQuery, (commentsSnapshot) => {
+            const postComments = commentsSnapshot.docs.map((commentDoc) => ({
+              id: commentDoc.id,
+              ...commentDoc.data(),
+            }));
+            setComments((prevComments) => ({ ...prevComments, [postDoc.id]: postComments }));
           });
-          setComments(prevComments => ({ ...prevComments, [postDoc.id]: postComments }));
-        });
+        }
       });
-      setPosts(newPosts);
+
+      Object.keys(commentUnsubscribersRef.current).forEach((postId) => {
+        if (!activePostIds.has(postId)) {
+          commentUnsubscribersRef.current[postId]?.();
+          delete commentUnsubscribersRef.current[postId];
+          setComments((prevComments) => {
+            const next = { ...prevComments };
+            delete next[postId];
+            return next;
+          });
+        }
+      });
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribePosts();
+      Object.values(commentUnsubscribersRef.current).forEach((unsubscribe) => unsubscribe?.());
+      commentUnsubscribersRef.current = {};
+    };
   }, [navigation]);
 
   const handleLike = async (postId) => {
-    const db = getFirestore(app);
     const postRef = doc(db, 'posts', postId);
 
     const postDoc = await getDoc(postRef);
@@ -79,7 +97,6 @@ const PostScreen = () => {
   const handleAddComment = async (postId) => {
     if (commentText.trim() === '') return;
 
-    const db = getFirestore(app);
     const commentData = {
       text: commentText,
       username: contextUser.username,
